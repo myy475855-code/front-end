@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Gallery</title>
+<style>
+:root{--bg:#f2efe9;--ink:#1d2b2a;--muted:#5d6b69;--accent:#1f6f6b;--card:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#141a1a;--ink:#eaf0ee;--muted:#9fb0ad;--accent:#5fc4bc;--card:#1e2626}}
+*{box-sizing:border-box;margin:0}
+body{font-family:Georgia,"Times New Roman",serif;background:var(--bg);color:var(--ink);padding:clamp(16px,4vw,48px)}
+header{max-width:1100px;margin:0 auto 24px}
+h1{font-size:clamp(2rem,6vw,3.4rem);letter-spacing:-.02em}
+header p{color:var(--muted);margin-top:6px;font-family:system-ui,sans-serif}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.filters button{font:500 .9rem system-ui,sans-serif;padding:8px 16px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;transition:background .25s,color .25s}
+.filters button:hover,.filters button.active{background:var(--accent);color:var(--bg)}
+.grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.item{position:relative;aspect-ratio:4/3;overflow:hidden;border-radius:6px;background:var(--card);cursor:pointer;border:0;padding:0;transition:opacity .35s,transform .35s}
+.item.hide{display:none}
+.item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s ease,filter .5s}
+.item:hover img,.item:focus-visible img{transform:scale(1.08);filter:brightness(.7)}
+.item span{position:absolute;left:12px;bottom:10px;color:#fff;font:500 .95rem system-ui,sans-serif;opacity:0;transform:translateY(8px);transition:.35s}
+.item:hover span,.item:focus-visible span{opacity:1;transform:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.lb{position:fixed;inset:0;background:rgba(10,14,14,.94);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:10;padding:16px}
+.lb.open{display:flex;animation:fade .25s}
+@keyframes fade{from{opacity:0}}
+.lb img{max-width:100%;max-height:78vh;border-radius:4px;transition:opacity .25s}
+.lb img.swap{opacity:0}
+.cap{color:#eaf0ee;font:1rem system-ui,sans-serif;margin-top:12px;text-align:center}
+.lb button{position:absolute;background:rgba(255,255,255,.12);color:#fff;border:0;width:46px;height:46px;border-radius:50%;font-size:1.4rem;cursor:pointer;transition:background .2s}
+.lb button:hover{background:rgba(255,255,255,.3)}
+.close{top:16px;right:16px}.prev{left:12px;top:50%}.next{right:12px;top:50%}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Image Gallery</h1>
+  <p>Tap a photo to view it full size. Use the filters to narrow the set.</p>
+  <div class="filters" id="filters"></div>
+</header>
+<main class="grid" id="grid"></main>
+
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Image viewer">
+  <button class="close" id="close" aria-label="Close">&times;</button>
+  <button class="prev" id="prev" aria-label="Previous image">&#10094;</button>
+  <img id="lbImg" alt="">
+  <p class="cap" id="cap"></p>
+  <button class="next" id="next" aria-label="Next image">&#10095;</button>
+</div>
+
+<script>
+// Images come from picsum.photos (fixed IDs). Swap in your own files if you like.
+const photos = [
+  {id:10, cat:"Nature", title:"Forest light"},
+  {id:15, cat:"Nature", title:"Rushing water"},
+  {id:28, cat:"Nature", title:"Mossy trail"},
+  {id:29, cat:"Mountains", title:"Mountain range"},
+  {id:37, cat:"Mountains", title:"Ridge at dusk"},
+  {id:48, cat:"City", title:"Laptop and coffee"},
+  {id:56, cat:"City", title:"Street corner"},
+  {id:65, cat:"City", title:"Old doorway"},
+  {id:75, cat:"Mountains", title:"Foggy peaks"},
+  {id:96, cat:"Nature", title:"Quiet field"},
+  {id:103, cat:"City", title:"Downtown skyline"},
+  {id:110, cat:"Nature", title:"Wild coast"}
+];
+const src = (id,w,h) => `https://picsum.photos/id/${id}/${w}/${h}`;
+const grid = document.getElementById('grid');
+const filters = document.getElementById('filters');
+const lb = document.getElementById('lb'), lbImg = document.getElementById('lbImg'), cap = document.getElementById('cap');
+let visible = [], current = 0, lastFocus = null;
+
+// Build grid
+photos.forEach((p,i) => {
+  const b = document.createElement('button');
+  b.className = 'item'; b.dataset.cat = p.cat; b.dataset.i = i;
+  b.setAttribute('aria-label', 'Open ' + p.title);
+  b.innerHTML = `<img loading="lazy" src="${src(p.id,480,360)}" alt="${p.title}"><span>${p.title}</span>`;
+  b.onclick = () => open(b);
+  grid.appendChild(b);
+});
+
+// Build filters
+['All', ...new Set(photos.map(p => p.cat))].forEach((c,i) => {
+  const b = document.createElement('button');
+  b.textContent = c; if (!i) b.classList.add('active');
+  b.onclick = () => {
+    filters.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+    grid.querySelectorAll('.item').forEach(it => it.classList.toggle('hide', c !== 'All' && it.dataset.cat !== c));
+  };
+  filters.appendChild(b);
+});
+
+function show(n){
+  current = (n + visible.length) % visible.length;
+  const p = photos[visible[current].dataset.i];
+  lbImg.classList.add('swap');
+  setTimeout(() => {
+    lbImg.src = src(p.id,1200,800); lbImg.alt = p.title;
+    cap.textContent = `${p.title} (${current+1} of ${visible.length})`;
+  }, 120);
+  lbImg.onload = () => lbImg.classList.remove('swap');
+}
+function open(el){
+  lastFocus = el;
+  visible = [...grid.querySelectorAll('.item:not(.hide)')];
+  lb.classList.add('open'); show(visible.indexOf(el));
+  document.getElementById('close').focus();
+}
+function close(){ lb.classList.remove('open'); lastFocus && lastFocus.focus(); }
+
+document.getElementById('close').onclick = close;
+document.getElementById('prev').onclick = () => show(current - 1);
+document.getElementById('next').onclick = () => show(current + 1);
+lb.onclick = e => { if (e.target === lb) close(); };
+document.addEventListener('keydown', e => {
+  if (!lb.classList.contains('open')) return;
+  if (e.key === 'Escape') close();
+  if (e.key === 'ArrowLeft') show(current - 1);
+  if (e.key === 'ArrowRight') show(current + 1);
+});
+// Swipe support on touch screens
+let x0 = null;
+lb.addEventListener('touchstart', e => x0 = e.touches[0].clientX);
+lb.addEventListener('touchend', e => {
+  if (x0 === null) return;
+  const dx = e.changedTouches[0].clientX - x0;
+  if (Math.abs(dx) > 50) show(current + (dx < 0 ? 1 : -1));
+  x0 = null;
+});
+</script>
+</body>
+</html>

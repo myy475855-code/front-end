@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculator</title>
+<style>
+:root{--bg:#e9e4d8;--body:#23302f;--screen:#d3e3c9;--ink:#1c2a22;--key:#364644;--keyink:#f3f1ea;--op:#c9773b;--fn:#4b5d5a;--eq:#1f6f6b}
+*{box-sizing:border-box;margin:0}
+body{min-height:100vh;display:grid;place-items:center;background:var(--bg);font-family:system-ui,sans-serif;padding:16px}
+.calc{width:min(360px,100%);background:var(--body);border-radius:22px;padding:18px;box-shadow:0 18px 40px rgba(0,0,0,.25)}
+.screen{background:var(--screen);color:var(--ink);border-radius:12px;padding:14px 16px;min-height:104px;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;margin-bottom:16px;box-shadow:inset 0 2px 6px rgba(0,0,0,.2);overflow:hidden}
+.expr{font-size:1rem;min-height:1.4em;opacity:.65;font-family:"Courier New",monospace;word-break:break-all;text-align:right}
+.out{font:600 2.6rem "Courier New",monospace;line-height:1.2;max-width:100%;overflow-x:auto;white-space:nowrap}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+button{font-size:1.4rem;padding:16px 0;border:0;border-radius:12px;background:var(--key);color:var(--keyink);cursor:pointer;transition:transform .08s,filter .15s}
+button:hover{filter:brightness(1.18)}
+button:active{transform:scale(.94)}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.fn{background:var(--fn)}.op{background:var(--op)}.eq{background:var(--eq)}
+.zero{grid-column:span 2}
+@media (prefers-reduced-motion:reduce){button{transition:none}}
+</style>
+</head>
+<body>
+<main class="calc" aria-label="Calculator">
+  <div class="screen" aria-live="polite">
+    <div class="expr" id="expr"></div>
+    <div class="out" id="out">0</div>
+  </div>
+  <div class="keys" id="keys">
+    <button class="fn" data-k="C">AC</button>
+    <button class="fn" data-k="±" aria-label="Toggle sign">±</button>
+    <button class="fn" data-k="%" aria-label="Percent">%</button>
+    <button class="op" data-k="/" aria-label="Divide">÷</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="op" data-k="*" aria-label="Multiply">×</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button class="op" data-k="-" aria-label="Subtract">−</button>
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button class="op" data-k="+" aria-label="Add">+</button>
+    <button class="zero" data-k="0">0</button>
+    <button data-k=".">.</button>
+    <button class="eq" data-k="=" aria-label="Equals">=</button>
+    <button class="fn" data-k="⌫" style="grid-column:span 4;font-size:1.1rem;padding:12px" aria-label="Backspace">⌫ Delete</button>
+  </div>
+</main>
+
+<script>
+const sym = {"+":"+","-":"−","*":"×","/":"÷"};
+let cur = "0", prev = null, op = null, fresh = false, error = false;
+const out = document.getElementById('out'), expr = document.getElementById('expr');
+
+function fmt(n){
+  if (!isFinite(n)) return "Error";
+  // trim floating point noise (0.1 + 0.2)
+  let s = String(parseFloat(n.toPrecision(12)));
+  if (s.length > 14) s = n.toExponential(6);
+  return s;
+}
+function calc(a, b, o){
+  a = parseFloat(a); b = parseFloat(b);
+  if (o === "+") return a + b;
+  if (o === "-") return a - b;
+  if (o === "*") return a * b;
+  if (o === "/") return b === 0 ? NaN : a / b;
+}
+function render(){
+  out.textContent = error ? "Can't divide by 0" : cur;
+  out.style.fontSize = (error || cur.length > 10) ? "1.5rem" : "";
+  expr.textContent = op ? `${prev} ${sym[op]}` : "";
+}
+function reset(){ cur = "0"; prev = null; op = null; fresh = false; error = false; }
+
+function press(k){
+  if (error && k !== "C") reset();
+  if (/^\d$/.test(k)){
+    cur = (cur === "0" || fresh) ? k : (cur.length < 15 ? cur + k : cur);
+    fresh = false;
+  } else if (k === "."){
+    if (fresh){ cur = "0."; fresh = false; }
+    else if (!cur.includes(".")) cur += ".";
+  } else if (k === "C"){ reset();
+  } else if (k === "⌫"){
+    if (!fresh) cur = cur.length > 1 && !(cur.length === 2 && cur[0] === "-") ? cur.slice(0,-1) : "0";
+  } else if (k === "±"){
+    if (cur !== "0") cur = cur[0] === "-" ? cur.slice(1) : "-" + cur;
+  } else if (k === "%"){
+    cur = fmt(parseFloat(cur) / 100); fresh = true;
+  } else if ("+-*/".includes(k)){
+    if (op && !fresh){
+      const r = calc(prev, cur, op);
+      if (isNaN(r)){ reset(); error = true; render(); return; }
+      cur = fmt(r);
+    }
+    prev = cur; op = k; fresh = true;
+  } else if (k === "="){
+    if (!op) return;
+    const r = calc(prev, cur, op);
+    expr.textContent = `${prev} ${sym[op]} ${cur} =`;
+    if (isNaN(r)){ reset(); error = true; out.textContent = "Can't divide by 0"; out.style.fontSize = "1.5rem"; return; }
+    cur = fmt(r); prev = null; op = null; fresh = true;
+    out.textContent = cur; out.style.fontSize = cur.length > 10 ? "1.5rem" : "";
+    return;
+  }
+  render();
+}
+
+document.getElementById('keys').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (b) press(b.dataset.k);
+});
+document.addEventListener('keydown', e => {
+  const k = e.key;
+  if (/^[\d.+\-*/%]$/.test(k)){ e.preventDefault(); press(k); }
+  else if (k === "Enter" || k === "="){ e.preventDefault(); press("="); }
+  else if (k === "Backspace") press("⌫");
+  else if (k === "Escape" || k === "Delete") press("C");
+});
+render();
+</script>
+</body>
+</html>
